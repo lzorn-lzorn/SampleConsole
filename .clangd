@@ -1,0 +1,16 @@
+CompileFlags:
+  CompilationDatabase: Ancestors
+  Add:
+    - -std=c++20
+    - -I.
+    - -Iimgui
+    - -Iimgui/backends
+    - -Iglad/include
+    - -Iglfw3/include
+
+Index:
+  Background: Build
+
+Completion:
+  AllScopes: Yes
+  HeaderInsertion: IWYU

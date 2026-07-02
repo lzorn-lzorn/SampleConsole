@@ -1,8 +1,10 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.21)
 project(SampleConsole)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
 # ---- 静态链接 MSVC 运行时库（避免依赖 MSVCP140.dll 等） ----
@@ -40,25 +42,28 @@ set(GLAD_SOURCES
 )
 
 # ---------- GLFW 库 ----------
-# 如果你的 glfw3/ 目录就是 GLFW 官方源码，可以直接加入构建
 add_subdirectory(glfw3)
 
+add_subdirectory(xerces-c)
 # ---------- 可执行文件 ----------
-add_executable(console WIN32
+add_executable(SampleConsole WIN32
         main.cpp
         ${IMGUI_SOURCES}
         ${GLAD_SOURCES}
         icon_rc.rc
 )
 
+
 if(MSVC)
-    set_target_properties(console PROPERTIES
-            LINK_FLAGS "/ENTRY:mainCRTStartup"
-    )
+        set_target_properties(SampleConsole PROPERTIES
+                LINK_FLAGS "/ENTRY:mainCRTStartup"
+        )
+        # 强制 UTF-8 编码(解决中文警告及语法错乱)
+        target_compile_options(SampleConsole PRIVATE /utf-8)
 endif()
 
 # 包含目录
-target_include_directories(console PRIVATE
+target_include_directories(SampleConsole PRIVATE
         imgui
         imgui/backends
         glad/include          # glad 头文件
@@ -66,7 +71,7 @@ target_include_directories(console PRIVATE
 )
 
 # 链接库
-target_link_libraries(console PRIVATE
+target_link_libraries(SampleConsole PRIVATE
         glfw                  # GLFW 目标（由 add_subdirectory 提供）
         OpenGL::GL
         Threads::Threads

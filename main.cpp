@@ -1,8 +1,3 @@
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include "ImGuiFileDialog.h"
-#include <GLFW/glfw3.h>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -13,6 +8,13 @@
 #include <sstream>
 #include <set>
 #include <memory>
+
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_glfw.h"
+#include "imgui/backends/imgui_impl_opengl3.h"
+#include "imgui/ImGuiFileDialog.h"
+#include <GLFW/glfw3.h>
+
 
 // ==================== 程序配置 ====================
 struct AppConfig {
