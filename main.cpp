@@ -578,6 +578,17 @@ private:
     std::string m_textBuf;
     std::map<std::string, std::string> m_attrBuf;   // 属性名 -> 属性值
 
+    // 用于暂存新节点的属性
+    std::string m_newAttrName;
+    std::string m_newAttrValue;
+    std::map<std::string, std::string> m_newAttributes;   // 待添加的属性集
+
+    void ClearNewAttributes() {
+        m_newAttrName.clear();
+        m_newAttrValue.clear();
+        m_newAttributes.clear();
+    }
+
     void CloseDocument() {
         if (m_doc) {
             m_doc->release();
@@ -717,20 +728,48 @@ private:
 
         ImGui::Separator();
 
-        // 保存按钮
+        // ---------- 新节点属性预定义 ----------
+        ImGui::Text("New Child Attributes:");
+        ImGui::PushItemWidth(100);
+        ImGui::InputText("##newAttrName", &m_newAttrName);
+        ImGui::SameLine();
+        ImGui::InputText("##newAttrValue", &m_newAttrValue);
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        if (ImGui::Button("Add Attribute")) {
+            if (!m_newAttrName.empty()) {
+                m_newAttributes[m_newAttrName] = m_newAttrValue;
+                m_newAttrName.clear();
+                m_newAttrValue.clear();
+            }
+        }
+
+        // 显示已添加的属性
+        if (!m_newAttributes.empty()) {
+            ImGui::Text("Attributes to apply:");
+            for (const auto& pair : m_newAttributes) {
+                ImGui::BulletText("%s = %s", pair.first.c_str(), pair.second.c_str());
+            }
+        }
+
+        // ---------- 按钮行 ----------
         if (ImGui::Button("Save")) {
             SaveToFile(m_currentFilePath);
         }
         ImGui::SameLine();
-        // 按钮
         if (ImGui::Button("Add Child Element")) {
             DOMElement* elem = node->getOwnerDocument()->createElement(XMLString::transcode("newElement"));
+            // 应用暂存属性
+            for (const auto& pair : m_newAttributes) {
+                elem->setAttribute(XMLString::transcode(pair.first.c_str()),
+                                XMLString::transcode(pair.second.c_str()));
+            }
             node->appendChild(elem);
             m_selectedNode = elem;
-            // 更新缓冲区
             m_nodeNameBuf = "newElement";
             m_textBuf = "";
             UpdateAttrBuf(elem);
+            ClearNewAttributes();  // 清空临时属性列表
         }
         ImGui::SameLine();
         if (ImGui::Button("Delete Node")) {
@@ -748,6 +787,7 @@ private:
                     XMLString::release(&name);
                     m_textBuf = GetTextContent(m_selectedNode);
                 }
+                ClearNewAttributes();  // 切换节点后清空
             }
         }
     }
