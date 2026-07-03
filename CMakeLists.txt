@@ -34,6 +34,7 @@ set(IMGUI_SOURCES
         imgui/backends/imgui_impl_glfw.cpp
         imgui/backends/imgui_impl_opengl3.cpp
         imgui/ImGuiFileDialog.cpp
+        imgui/misc/cpp/imgui_stdlib.cpp
 )
 
 # ---------- OpenGL 加载器 (glad) ----------
@@ -44,7 +45,33 @@ set(GLAD_SOURCES
 # ---------- GLFW 库 ----------
 add_subdirectory(glfw3)
 
+# ---------- 自动获取 xerces‑c 源码 ----------
+#include(FetchContent)
+#
+## 可选：设置 xerces‑c 的构建选项（在下载前设定好）
+set(XERCES_BUILD_SHARED_LIBS OFF CACHE BOOL "Build xerces-c as static lib" FORCE)
+set(XERCES_BUILD_SAMPLES OFF CACHE BOOL "Don't build samples" FORCE)
+set(XERCES_BUILD_TESTS OFF CACHE BOOL "Don't build tests" FORCE)
+set(XERCES_BUILD_DOCS OFF CACHE BOOL "Don't build docs" FORCE)
+#
+#FetchContent_Declare(
+#  xerces-c
+#  GIT_REPOSITORY https://github.com/apache/xerces-c.git
+#  GIT_TAG        v3.3.0
+#)
+#
+#FetchContent_MakeAvailable(xerces-c)
+
 add_subdirectory(xerces-c)
+if (MSVC)
+    target_compile_options(xerces-c PRIVATE
+        /wd4996
+    )
+    # 如果是 CRT 弃用警告，配套加这个宏
+    target_compile_definitions(xerces-c PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+    )
+endif()
 # ---------- 可执行文件 ----------
 add_executable(SampleConsole WIN32
         main.cpp
@@ -67,7 +94,10 @@ target_include_directories(SampleConsole PRIVATE
         imgui
         imgui/backends
         glad/include          # glad 头文件
-        ${OPENGL_INCLUDE_DIR} # 通常不需要，但保留
+        ${OPENGL_INCLUDE_DIR}
+        xerces-c/src
+        # xerces-c 在编译时需要自动生成的配置文件 Xerces_autoconf_config.hpp，这个文件是在 CMake 配置阶段生成的，并存放在构建目录(如 build/xerces-c/src)中
+        ${CMAKE_BINARY_DIR}/xerces-c/src
 )
 
 # 链接库
@@ -75,9 +105,14 @@ target_link_libraries(SampleConsole PRIVATE
         glfw                  # GLFW 目标（由 add_subdirectory 提供）
         OpenGL::GL
         Threads::Threads
+        xerces-c
 )
 
 # Windows 下可能需要额外链接 opengl32.lib（OpenGL::GL 已处理）
 if(WIN32)
     # 某些情况下 glfw 会尝试链接 opengl32，但 OpenGL::GL 已包含
+endif()
+
+if(MSVC)
+    target_compile_definitions(SampleConsole PRIVATE XERCES_STATIC_LIBRARY)
 endif()

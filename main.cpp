@@ -10,11 +10,21 @@
 #include <memory>
 
 #include "imgui/imgui.h"
+#include "imgui/misc/cpp/imgui_stdlib.h"
 #include "imgui/backends/imgui_impl_glfw.h"
 #include "imgui/backends/imgui_impl_opengl3.h"
 #include "imgui/ImGuiFileDialog.h"
 #include <GLFW/glfw3.h>
 
+#include <xercesc/dom/DOM.hpp>
+#include <xercesc/dom/DOMDocument.hpp>
+#include <xercesc/dom/DOMElement.hpp>
+#include <xercesc/dom/DOMAttr.hpp>
+#include <xercesc/dom/DOMText.hpp>
+#include <xercesc/parsers/XercesDOMParser.hpp>
+#include <xercesc/util/XMLString.hpp>
+#include <xercesc/util/PlatformUtils.hpp>
+#include <xercesc/framework/LocalFileFormatTarget.hpp>
 
 // ==================== 程序配置 ====================
 struct AppConfig {
@@ -56,7 +66,6 @@ static AppConfig LoadConfig() {
         std::istringstream iss(line);
         iss >> cfg.searchX >> cfg.searchY >> cfg.searchW >> cfg.searchH;
     }
-    // 新增：读取主窗口几何（第4行）
     if (std::getline(file, line)) {
         std::istringstream iss(line);
         iss >> cfg.mainX >> cfg.mainY >> cfg.mainW >> cfg.mainH;
@@ -439,11 +448,356 @@ private:
     }
 };
 
+// ==================== XML 界面 ====================
+using namespace xercesc;
+class XMLViewer {
+public:
+    XMLViewer() = default;
+    ~XMLViewer() { CloseDocument(); }
+
+    bool LoadFromFile(const std::string& filePath) {
+        CloseDocument();
+        try {
+            XercesDOMParser parser;
+            parser.parse(filePath.c_str());
+            m_doc = parser.adoptDocument();
+            m_selectedNode = m_doc->getDocumentElement();
+            m_currentFilePath = filePath;
+            m_visible = true;   // 加载成功后自动显示
+            return true;
+        } catch (const XMLException& e) {
+            char* msg = XMLString::transcode(e.getMessage());
+            fprintf(stderr, "XML Error: %s\n", msg);
+            XMLString::release(&msg);
+            return false;
+        } catch (...) {
+            fprintf(stderr, "Unknown error loading XML\n");
+            return false;
+        }
+    }
+
+    bool SaveToFile(const std::string& filePath) {
+        if (!m_doc || filePath.empty()) return false;
+        // 使用 DOMImplementation 来序列化
+        DOMImplementation* impl = DOMImplementationRegistry::getDOMImplementation(XMLString::transcode("LS"));
+        if (!impl) return false;
+        DOMLSSerializer* serializer = ((DOMImplementationLS*)impl)->createLSSerializer();
+        if (serializer->getDomConfig()->canSetParameter(XMLUni::fgDOMWRTFormatPrettyPrint, true))
+            serializer->getDomConfig()->setParameter(XMLUni::fgDOMWRTFormatPrettyPrint, true);
+        XMLFormatTarget* target = new LocalFileFormatTarget(filePath.c_str());
+        DOMLSOutput* output = ((DOMImplementationLS*)impl)->createLSOutput();
+        output->setByteStream(target);
+        serializer->write(m_doc, output);
+        delete output;
+        delete target;
+        serializer->release();
+        return true;
+    }
+
+
+    void Draw() {
+        if (!m_visible) return;
+        
+        ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+        if (!ImGui::Begin("XML Viewer", &m_visible)) {
+            ImGui::End();
+            return;
+        }
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) {
+                if (!m_currentFilePath.empty()) {
+                    SaveToFile(m_currentFilePath);
+                }
+            }
+        }
+
+        if (!m_doc) {
+            ImGui::Text("No XML file loaded.");
+            if (ImGui::Button("Load XML...")) {
+                m_showLoadDialog = true;
+            }
+            ImGui::End();
+            return;
+        }
+
+        // 菜单栏
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::MenuItem("Load...")) {
+                m_showLoadDialog = true;
+            }
+            if (ImGui::MenuItem("Save")) {
+                SaveToFile(m_currentFilePath);
+            }
+            ImGui::EndMenuBar();
+        }
+
+        // 左右分栏
+        ImGui::BeginChild("Tree", ImVec2(250, -1), true);
+        DrawNode(m_doc->getDocumentElement(), 0);
+        ImGui::EndChild();
+        ImGui::SameLine();
+        ImGui::BeginChild("Edit", ImVec2(0, -1), true);
+        if (m_selectedNode) DrawEditPanel(m_selectedNode);
+        else ImGui::Text("Select a node to edit.");
+        ImGui::EndChild();
+
+        ImGui::End();
+
+        // 内部的文件加载对话框（用于窗口内的 Load... 按钮）
+        if (m_showLoadDialog) {
+            IGFD::FileDialogConfig cfg;
+            cfg.path = ".";
+            cfg.countSelectionMax = 1;
+            cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog("XmlViewerInternalFile", "Choose XML File", ".xml", cfg);
+            m_showLoadDialog = false;
+        }
+        if (ImGuiFileDialog::Instance()->Display("XmlViewerInternalFile")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                if (LoadFromFile(path)) {
+                    m_currentFilePath = path;
+                }
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+    bool IsVisible() const { return m_visible; }
+    bool IsOpen() const { return m_visible; }
+    void ToggleVisible() { m_visible = !m_visible; }
+
+private:
+    DOMDocument* m_doc = nullptr;
+    DOMNode* m_selectedNode = nullptr;
+    bool m_visible = false;
+    bool m_showLoadDialog = false;
+    std::string m_currentFilePath;
+
+    // 编辑缓冲区
+    std::string m_nodeNameBuf;
+    std::string m_textBuf;
+    std::map<std::string, std::string> m_attrBuf;   // 属性名 -> 属性值
+
+    void CloseDocument() {
+        if (m_doc) {
+            m_doc->release();
+            m_doc = nullptr;
+            m_selectedNode = nullptr;
+        }
+    }
+
+    // 递归绘制树节点
+    void DrawNode(DOMNode* node, int id) {
+        if (!node) return;
+        if (node->getNodeType() == DOMNode::ELEMENT_NODE) {
+            char* name = XMLString::transcode(node->getNodeName());
+            bool isSelected = (node == m_selectedNode);
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
+            if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
+
+            bool opened = ImGui::TreeNodeEx((void*)(intptr_t)id, flags, "%s", name);
+            if (ImGui::IsItemClicked()) {
+                m_selectedNode = node;
+                // 更新缓冲区
+                m_nodeNameBuf = name;
+                m_textBuf = GetTextContent(node);
+                UpdateAttrBuf(node);
+            }
+
+            XMLString::release(&name);
+
+            if (opened) {
+                DOMNode* child = node->getFirstChild();
+                int counter = 0;
+                while (child) {
+                    DrawNode(child, counter++);
+                    child = child->getNextSibling();
+                }
+                ImGui::TreePop();
+            }
+        } else if (node->getNodeType() == DOMNode::TEXT_NODE) {
+            char* text = XMLString::transcode(node->getNodeValue());
+            // 忽略仅包含空白的文本节点
+            std::string s(text);
+            XMLString::release(&text);
+            bool onlyWhitespace = true;
+            for (char c : s) if (!std::isspace((unsigned char)c)) { onlyWhitespace = false; break; }
+            if (!onlyWhitespace) {
+                ImGui::BulletText("\"%s\"", s.c_str());
+            }
+        }
+    }
+
+    // 编辑面板
+    void DrawEditPanel(DOMNode* node) {
+        if (!node) return;
+        ImGui::Text("Node Name:");
+        ImGui::SameLine();
+        if (ImGui::InputText("##nodename", &m_nodeNameBuf)) {
+            // 修改节点名称
+            if (!m_nodeNameBuf.empty()) {
+                DOMElement* elem = dynamic_cast<DOMElement*>(node);
+                if (elem) {
+                    DOMDocument* doc = node->getOwnerDocument();
+                    DOMElement* newElem = doc->createElement(XMLString::transcode(m_nodeNameBuf.c_str()));
+                    // 复制属性
+                    DOMNamedNodeMap* attrs = elem->getAttributes();
+                    if (attrs) {
+                        for (XMLSize_t i = 0; i < attrs->getLength(); ++i) {
+                            DOMNode* attr = attrs->item(i);
+                            newElem->setAttribute(attr->getNodeName(), attr->getNodeValue());
+                        }
+                    }
+                    // 复制子节点
+                    DOMNode* child = elem->getFirstChild();
+                    while (child) {
+                        DOMNode* next = child->getNextSibling();
+                        newElem->appendChild(child->cloneNode(true));
+                        child = next;
+                    }
+                    DOMNode* parent = elem->getParentNode();
+                    if (parent) {
+                        parent->replaceChild(newElem, elem);
+                        m_selectedNode = newElem;
+                    }
+                }
+            }
+        }
+
+        // 属性编辑
+        DOMNamedNodeMap* attrs = node->getAttributes();
+        if (attrs && attrs->getLength() > 0) {
+            ImGui::Text("Attributes:");
+            for (XMLSize_t i = 0; i < attrs->getLength(); ++i) {
+                DOMNode* attr = attrs->item(i);
+                char* attrName = XMLString::transcode(attr->getNodeName());
+                std::string key(attrName);
+                XMLString::release(&attrName);
+                // 确保缓冲区存在
+                if (m_attrBuf.find(key) == m_attrBuf.end()) {
+                    char* val = XMLString::transcode(attr->getNodeValue());
+                    m_attrBuf[key] = val;
+                    XMLString::release(&val);
+                }
+                ImGui::Text("%s", key.c_str());
+                ImGui::SameLine();
+                if (ImGui::InputText(("##attr_" + key).c_str(), &m_attrBuf[key])) {
+                    // 更新 DOM 属性值
+                    xercesc::DOMElement* elem = dynamic_cast<xercesc::DOMElement*>(node);
+                    if (elem) {
+                        elem->setAttribute(
+                            XMLString::transcode(key.c_str()), 
+                            XMLString::transcode(m_attrBuf[key].c_str()));
+                    }
+                }
+            }
+        }
+
+        // 文本内容
+        ImGui::Text("Text Content:");
+        
+        if (ImGui::InputTextMultiline("##text", &m_textBuf, ImVec2(-1, 100))) {
+            // 更新文本节点
+            DOMNode* textChild = nullptr;
+            DOMNode* child = node->getFirstChild();
+            while (child) {
+                if (child->getNodeType() == DOMNode::TEXT_NODE) {
+                    textChild = child;
+                    break;
+                }
+                child = child->getNextSibling();
+            }
+            if (textChild) {
+                textChild->setNodeValue(XMLString::transcode(m_textBuf.c_str()));
+            } else if (!m_textBuf.empty()) {
+                DOMText* newText = node->getOwnerDocument()->createTextNode(XMLString::transcode(m_textBuf.c_str()));
+                node->appendChild(newText);
+            }
+        }
+
+        ImGui::Separator();
+
+        // 保存按钮
+        if (ImGui::Button("Save")) {
+            SaveToFile(m_currentFilePath);
+        }
+        ImGui::SameLine();
+        // 按钮
+        if (ImGui::Button("Add Child Element")) {
+            DOMElement* elem = node->getOwnerDocument()->createElement(XMLString::transcode("newElement"));
+            node->appendChild(elem);
+            m_selectedNode = elem;
+            // 更新缓冲区
+            m_nodeNameBuf = "newElement";
+            m_textBuf = "";
+            UpdateAttrBuf(elem);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Delete Node")) {
+            DOMNode* parent = node->getParentNode();
+            if (parent) {
+                parent->removeChild(node);
+                m_selectedNode = parent;
+                if (m_selectedNode == m_doc->getDocumentElement() && !m_doc->getDocumentElement()) {
+                    m_selectedNode = nullptr;
+                }
+                UpdateAttrBuf(m_selectedNode);
+                if (m_selectedNode) {
+                    char* name = XMLString::transcode(m_selectedNode->getNodeName());
+                    m_nodeNameBuf = name;
+                    XMLString::release(&name);
+                    m_textBuf = GetTextContent(m_selectedNode);
+                }
+            }
+        }
+    }
+
+    // 工具函数
+    std::string GetTextContent(DOMNode* node) {
+        DOMNode* child = node->getFirstChild();
+        while (child) {
+            if (child->getNodeType() == DOMNode::TEXT_NODE) {
+                char* val = XMLString::transcode(child->getNodeValue());
+                std::string s(val);
+                XMLString::release(&val);
+                return s;
+            }
+            child = child->getNextSibling();
+        }
+        return "";
+    }
+
+    void UpdateAttrBuf(DOMNode* node) {
+        m_attrBuf.clear();
+        DOMNamedNodeMap* attrs = node->getAttributes();
+        if (attrs) {
+            for (XMLSize_t i = 0; i < attrs->getLength(); ++i) {
+                DOMNode* attr = attrs->item(i);
+                char* name = XMLString::transcode(attr->getNodeName());
+                char* value = XMLString::transcode(attr->getNodeValue());
+                m_attrBuf[name] = value;
+                XMLString::release(&name);
+                XMLString::release(&value);
+            }
+        }
+    }
+};
+
+
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
 int main(int, char**) {
+    try {
+        XMLPlatformUtils::Initialize();
+    } catch (const XMLException& e) {
+        char* msg = XMLString::transcode(e.getMessage());
+        fprintf(stderr, "Xerces init error: %s\n", msg);
+        XMLString::release(&msg);
+        return 1;
+    }
+
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) return 1;
 
@@ -468,7 +822,7 @@ int main(int, char**) {
         winH = config.mainH;
     }
 
-    GLFWwindow* window = glfwCreateWindow(winW, winH, "Imgui Console", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(winW, winH, "Sample Console", nullptr, nullptr);
     if (!window) return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
@@ -508,6 +862,7 @@ int main(int, char**) {
     }
 
     std::vector<std::unique_ptr<Console>> consoles;
+    std::vector<std::unique_ptr<XMLViewer>> xmlViewers;
     int consoleIdCounter = 0;
     for (auto& entry : config.consoles) {
         auto c = std::make_unique<Console>(consoleIdCounter++);
@@ -534,6 +889,12 @@ int main(int, char**) {
     .AddMenuItem("View", "Toggle Search Panel", [&]() {
         searchPanel.visible = !searchPanel.visible;
         if (searchPanel.visible) searchPanel.Open();
+    }).AddMenuItem("View", "XML Viewer", [&]() {
+        IGFD::FileDialogConfig cfg;
+        cfg.path = ".";
+        cfg.countSelectionMax = 1;
+        cfg.flags = ImGuiFileDialogFlags_Modal;
+        ImGuiFileDialog::Instance()->OpenDialog("XmlViewerFileDialog", "Choose XML File", ".xml", cfg);
     });
 
     shortcuts.Register(ImGuiMod_Ctrl | ImGuiKey_F, [&]() {
@@ -566,7 +927,26 @@ int main(int, char**) {
             }
             ImGuiFileDialog::Instance()->Close();
         }
+        if (ImGuiFileDialog::Instance()->Display("XmlViewerFileDialog")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                auto viewer = std::make_unique<XMLViewer>();
+                if (viewer->LoadFromFile(path)) {
+                    xmlViewers.push_back(std::move(viewer));
+                }
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
 
+        // 绘制所有 XML Viewer
+        for (size_t i = 0; i < xmlViewers.size(); ++i) {
+            xmlViewers[i]->Draw();
+            // 如果窗口关闭，从列表中移除
+            if (!xmlViewers[i]->IsOpen()) {
+                xmlViewers.erase(xmlViewers.begin() + i);
+                --i;
+            }
+        }
         if (!browseDialogOpen) {
             pendingBrowseConsole = nullptr;
             for (auto& c : consoles) {
@@ -680,6 +1060,7 @@ int main(int, char**) {
             config.searchW = (int)size.x; config.searchH = (int)size.y;
         }
 
+        
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);

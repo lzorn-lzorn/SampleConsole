@@ -7,8 +7,10 @@ CompileFlags:
     - -Iimgui/backends
     - -Iglad/include
     - -Iglfw3/include
+    - -Ixerces-c/src
 
 Index:
+
   Background: Build
 
 Completion:
