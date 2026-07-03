@@ -1,18 +1,28 @@
 CompileFlags:
-  CompilationDatabase: Ancestors
+  Compiler: clang++
   Add:
+    - -Wall
+    - -Wextra
+    - -Wpedantic
     - -std=c++20
-    - -I.
-    - -Iimgui
-    - -Iimgui/backends
-    - -Iglad/include
-    - -Iglfw3/include
-    - -Ixerces-c/src
+    - -IE:/glad/include
+    - -IE:/glfw3/include
+    - -IE:/imgui
+    - -IE:/imgui/backends
+    - -IE:/xerces-c/src
+    - -IE:/build/xerces-c/src
+#  AddIf:
+#    # 只对 C++ 源文件和头文件添加 c++20 标准
+#    - PathMatch: .*\.(c|cpp|cc|cxx|h|hpp|hh|hxx)$
+#      Add: [-std=c++20]
 
 Index:
-
+  # 后台索引模式：自动在后台建立索引，提高跳转/补全精度
   Background: Build
 
 Completion:
+  # 在所有上下文中提供补全(例如 #include 后自动补全头文件)
   AllScopes: Yes
+  # 按需插入 #include(Include-What-You-Use 风格)
   HeaderInsertion: IWYU
+

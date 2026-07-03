@@ -42,6 +42,16 @@ set(GLAD_SOURCES
         glad/src/glad.c
 )
 
+# ---------- 应用层源文件 ----------
+set(APP_SOURCES
+        src/App.cpp
+        src/Console.cpp
+        src/MenuBar.cpp
+        src/SearchPanel.cpp
+        src/ShortcutManager.cpp
+        src/XmlViewer.cpp
+)
+
 # ---------- GLFW 库 ----------
 add_subdirectory(glfw3)
 
@@ -75,6 +85,7 @@ endif()
 # ---------- 可执行文件 ----------
 add_executable(SampleConsole WIN32
         main.cpp
+        ${APP_SOURCES}
         ${IMGUI_SOURCES}
         ${GLAD_SOURCES}
         icon_rc.rc

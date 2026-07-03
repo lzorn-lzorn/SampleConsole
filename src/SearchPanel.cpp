@@ -1,5 +1,7 @@
 #include "SearchPanel.h"
 
+#include <cstring>
+
 namespace 
 {
 	static bool doFuzzyMatch(const std::string& Line, const std::string& query) 

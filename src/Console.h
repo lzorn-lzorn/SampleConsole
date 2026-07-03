@@ -5,6 +5,8 @@
 #include <set>
 #include <vector>
 
+#include "../imgui/imgui.h"
+
 // ==================== 控制台 ====================
 struct Console {
     std::string   FilePath;
@@ -33,7 +35,9 @@ struct Console {
     void draw(const char* title, bool* p_open,
               const std::vector<int>* highlightLines = nullptr,
               int selectedHighlightLine = -1,
-              bool* outActivated = nullptr) ;
+              bool* outActivated = nullptr,
+              ImVec2* outWindowPos = nullptr,
+              ImVec2* outWindowSize = nullptr);
 
 private:
     int pending_scroll_line_ = -1;

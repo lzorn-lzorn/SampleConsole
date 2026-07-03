@@ -1,0 +1,9 @@
+-std=c++20
+-IE:/Code/SampleConsole
+-IE:/Code/SampleConsole/imgui
+-IE:/Code/SampleConsole/imgui/backends
+-IE:/Code/SampleConsole/glad/include
+-IE:/Code/SampleConsole/glfw3/include
+-IE:/Code/SampleConsole/xerces-c/src
+-IE:/Code/SampleConsole/build/xerces-c/src
+-DXERCES_STATIC_LIBRARY

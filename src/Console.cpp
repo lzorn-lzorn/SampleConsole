@@ -83,7 +83,7 @@ void Console::update()
 	FileStream.clear();
 }
 
-void Console::draw(const char* title, bool* p_open, const std::vector<int>* highlightLines, int selectedHighlightLine, bool* outActivated) 
+void Console::draw(const char* title, bool* p_open, const std::vector<int>* highlightLines, int selectedHighlightLine, bool* outActivated, ImVec2* outWindowPos, ImVec2* outWindowSize)
 {
 	if (!ImGui::Begin(title, p_open)) 
 	{  
@@ -277,6 +277,16 @@ void Console::draw(const char* title, bool* p_open, const std::vector<int>* high
 		ImGui::SetScrollHereY(1.0f);
 	}
 	ImGui::EndChild();
+
+	if (outWindowPos)
+	{
+		*outWindowPos = ImGui::GetWindowPos();
+	}
+	if (outWindowSize)
+	{
+		*outWindowSize = ImGui::GetWindowSize();
+	}
+
 	ImGui::End();
 }
 
