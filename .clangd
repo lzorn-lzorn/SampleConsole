@@ -5,12 +5,13 @@ CompileFlags:
     - -Wextra
     - -Wpedantic
     - -std=c++20
-    - -IE:/glad/include
-    - -IE:/glfw3/include
-    - -IE:/imgui
-    - -IE:/imgui/backends
-    - -IE:/xerces-c/src
-    - -IE:/build/xerces-c/src
+    - -Iglad/include
+    - -Iglfw3/include
+    - -Iimgui
+    - -Iimgui/backends
+    - -Ixerces-c
+    - -Ixerces-c/src
+    - -Ibuild/xerces-c/src
 #  AddIf:
 #    # 只对 C++ 源文件和头文件添加 c++20 标准
 #    - PathMatch: .*\.(c|cpp|cc|cxx|h|hpp|hh|hxx)$
