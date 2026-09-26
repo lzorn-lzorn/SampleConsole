@@ -3,7 +3,7 @@
 	"configurePresets": [
 		{
 			"name": "default",
-			"generator": "Visual Studio 18 2026",
+			"displayName": "Cross-platform",
 			"binaryDir": "${sourceDir}/build"
 		}
 	]

@@ -24,7 +24,6 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "Don't build GLFW tests" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "Don't build GLFW docs" FORCE)
 
 
-
 # ---------- ImGui 源文件 ----------
 set(IMGUI_SOURCES
         imgui/imgui.cpp
@@ -52,52 +51,43 @@ set(APP_SOURCES
         src/XmlViewer.cpp
 )
 
+# ---------- 平台相关源文件 ----------
+set(APP_PLATFORM_SOURCES)
+if(WIN32)
+    # Windows 图标资源，其它平台无法编译
+    list(APPEND APP_PLATFORM_SOURCES icon_rc.rc)
+endif()
+
 # ---------- GLFW 库 ----------
 add_subdirectory(glfw3)
 
-# ---------- 自动获取 xerces‑c 源码 ----------
-#include(FetchContent)
-#
-## 可选：设置 xerces‑c 的构建选项（在下载前设定好）
-set(XERCES_BUILD_SHARED_LIBS OFF CACHE BOOL "Build xerces-c as static lib" FORCE)
-set(XERCES_BUILD_SAMPLES OFF CACHE BOOL "Don't build samples" FORCE)
-set(XERCES_BUILD_TESTS OFF CACHE BOOL "Don't build tests" FORCE)
-set(XERCES_BUILD_DOCS OFF CACHE BOOL "Don't build docs" FORCE)
-#
-#FetchContent_Declare(
-#  xerces-c
-#  GIT_REPOSITORY https://github.com/apache/xerces-c.git
-#  GIT_TAG        v3.3.0
-#)
-#
-#FetchContent_MakeAvailable(xerces-c)
-
-add_subdirectory(xerces-c)
-if (MSVC)
-    target_compile_options(xerces-c PRIVATE
-        /wd4996
-    )
-    # 如果是 CRT 弃用警告，配套加这个宏
-    target_compile_definitions(xerces-c PRIVATE
-        _CRT_SECURE_NO_WARNINGS
-    )
+# ---------- xerces-c（静态库，跳过 samples/tests/doc 以加快构建） ----------
+# 注意：xerces-c 使用标准变量 BUILD_SHARED_LIBS 控制静态/共享，而非 XERCES_BUILD_SHARED_LIBS
+set(BUILD_SHARED_LIBS OFF)
+# EXCLUDE_FROM_ALL：仅编译 SampleConsole 依赖到的 xerces-c 目标，
+# 跳过 xerces-c 无条件 add_subdirectory 的 samples/tests/doc
+add_subdirectory(xerces-c EXCLUDE_FROM_ALL)
+if(MSVC)
+    target_compile_options(xerces-c PRIVATE /wd4996)
+    target_compile_definitions(xerces-c PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
+
 # ---------- 可执行文件 ----------
+# WIN32 关键字仅影响 Windows（无控制台窗口的 GUI 程序），其它平台自动忽略
 add_executable(SampleConsole WIN32
         main.cpp
         ${APP_SOURCES}
         ${IMGUI_SOURCES}
         ${GLAD_SOURCES}
-        icon_rc.rc
+        ${APP_PLATFORM_SOURCES}
 )
 
-
 if(MSVC)
-        set_target_properties(SampleConsole PROPERTIES
-                LINK_FLAGS "/ENTRY:mainCRTStartup"
-        )
-        # 强制 UTF-8 编码(解决中文警告及语法错乱)
-        target_compile_options(SampleConsole PRIVATE /utf-8)
+    set_target_properties(SampleConsole PROPERTIES
+            LINK_FLAGS "/ENTRY:mainCRTStartup"
+    )
+    # 强制 UTF-8 编码(解决中文警告及语法错乱)
+    target_compile_options(SampleConsole PRIVATE /utf-8)
 endif()
 
 # 包含目录
@@ -107,7 +97,8 @@ target_include_directories(SampleConsole PRIVATE
         glad/include          # glad 头文件
         ${OPENGL_INCLUDE_DIR}
         xerces-c/src
-        # xerces-c 在编译时需要自动生成的配置文件 Xerces_autoconf_config.hpp，这个文件是在 CMake 配置阶段生成的，并存放在构建目录(如 build/xerces-c/src)中
+        # xerces-c 编译时需要自动生成的 Xerces_autoconf_config.hpp，
+        # 它在 CMake 配置阶段生成于构建目录（如 build/xerces-c/src）
         ${CMAKE_BINARY_DIR}/xerces-c/src
 )
 
@@ -119,11 +110,5 @@ target_link_libraries(SampleConsole PRIVATE
         xerces-c
 )
 
-# Windows 下可能需要额外链接 opengl32.lib（OpenGL::GL 已处理）
-if(WIN32)
-    # 某些情况下 glfw 会尝试链接 opengl32，但 OpenGL::GL 已包含
-endif()
-
-if(MSVC)
-    target_compile_definitions(SampleConsole PRIVATE XERCES_STATIC_LIBRARY)
-endif()
+# 说明：XERCES_STATIC_LIBRARY 在静态构建时已由 xerces-c 生成的
+# Xerces_autoconf_config.hpp 自动定义，无需在此手动添加。
